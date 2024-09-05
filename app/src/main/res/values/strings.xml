@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">dyf</string>
+    <string name="title_activity_splash">SplashActivity</string>
+    <string name="title_activity_registrrate">RegistrrateActivity</string>
+    <string name="title_activity_registrarse">RegistrarseActivity</string>
+    <string name="title_activity_olvidaste">OlvidasteActivity</string>
+    <string name="title_activity_menu">MenuActivity</string>
+</resources>
