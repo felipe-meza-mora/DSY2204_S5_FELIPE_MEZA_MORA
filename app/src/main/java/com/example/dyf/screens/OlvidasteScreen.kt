@@ -31,33 +31,22 @@ fun OlvidasteScreen(userPreferences: UserPreferences) {
     var rut by remember { mutableStateOf("") }
 
     // Estados para errores de validación
-    var correoError by remember { mutableStateOf("El correo no puede estar vacío") }
-    var rutError by remember { mutableStateOf("El RUT no puede estar vacío") }
+    var rutError by remember { mutableStateOf<String?>(null) }
+    var correoError by remember { mutableStateOf<String?>(null) }
+    var isFormValid by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf<String?>(null) }
-    var errorMensaje by remember { mutableStateOf<String?>(null) }
     var userList by remember { mutableStateOf<List<UserData>>(emptyList()) }
 
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var successMessage by remember { mutableStateOf("") } // Mensaje de éxito personalizado
+    var errorMessage by remember { mutableStateOf("") }   // Mensaje de error personalizado
+
     val context = LocalContext.current
-    var showDialog by remember { mutableStateOf(false) }
-    var dialogMessage by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         userPreferences.userPreferencesFlow.collect { users ->
             userList = users
-        }
-    }
-
-    // Función de vibración
-    fun vibrate(context: Context) {
-        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        if (vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val vibrationEffect = VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
-                vibrator.vibrate(vibrationEffect)
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(500)
-            }
         }
     }
 
@@ -93,53 +82,58 @@ fun OlvidasteScreen(userPreferences: UserPreferences) {
     }
 
     // Validación del formulario
-    fun validateForm(): Boolean {
-        var isValid = true
-
+    fun validateForm() {
         correoError = when {
             correo.isBlank() -> "El correo no puede estar vacío"
             !isValidEmail(correo) -> "El correo no es válido"
-            else -> null.toString()
+            else -> null
         }
         rutError = when {
             rut.isBlank() -> "El RUT no puede estar vacío"
             !isValidRUT(rut) -> "El RUT no es válido"
-            else -> null.toString()
+            else -> null
         }
 
-        isValid = correoError == null && rutError == null
+        isFormValid = correoError == null && rutError == null
+    }
 
-        if (isValid) {
-            val user = userList.find { it.correo == correo && it.rut == rut }
-            if (user == null) {
-                correoError = "Datos erróneos"
-                rutError = "Datos erróneos"
-                isValid = false
+    // Función para la vibración
+    fun vibrate(context: Context, isSuccess: Boolean) {
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val vibrationEffect = if (isSuccess) {
+                    VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE)
+                } else {
+                    VibrationEffect.createWaveform(longArrayOf(0, 100, 50, 100), -1)
+                }
+                vibrator.vibrate(vibrationEffect)
             } else {
-                password = user.password
+                if (isSuccess) {
+                    vibrator.vibrate(300) // Vibración única de 300ms
+                } else {
+                    vibrator.vibrate(longArrayOf(0, 100, 50, 100), -1) // Vibración patrón
+                }
             }
         }
-
-        return isValid
     }
 
     // Función de recuperación de contraseña
     fun recuperar() {
-        if (validateForm()) {
+        validateForm()
+        if (isFormValid) {
             val usuario = userList.find { it.correo == correo && it.rut == rut }
             if (usuario != null) {
-                dialogMessage = "Tu contraseña es: ${usuario.password}"
-                showDialog = true
-                vibrate(context)
+                successMessage = "Tu contraseña es: ${usuario.password}"
+                showSuccessDialog = true
+                vibrate(context, true)  // Vibración de éxito
             } else {
-                errorMensaje = "Los datos son erróneos"
-                dialogMessage = "Los datos son erróneos"
-                showDialog = true
-                vibrate(context)
+                errorMessage = "Los datos ingresados no coinciden con ningún usuario registrado."
+                showErrorDialog = true
+                vibrate(context, false)  // Vibración de error
             }
         }
     }
-
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -203,7 +197,10 @@ fun OlvidasteScreen(userPreferences: UserPreferences) {
             val correoColor by animateColorAsState(targetValue = if (correoError == null) Color(0xFFFFC107) else Color(0xFFFF5449))
             OutlinedTextField(
                 value = correo,
-                onValueChange = { correo = it },
+                onValueChange = {
+                    correo = it
+                    validateForm()
+                },
                 label = { Text("Correo Electrónico") },
                 isError = correoError != null,
                 modifier = Modifier
@@ -247,7 +244,10 @@ fun OlvidasteScreen(userPreferences: UserPreferences) {
             val rutColor by animateColorAsState(targetValue = if (rutError == null) Color(0xFFFFC107) else Color(0xFFFF5449))
             OutlinedTextField(
                 value = rut,
-                onValueChange = { rut = it },
+                onValueChange = {
+                    rut = it
+                    validateForm()
+                },
                 label = { Text("RUT") },
                 isError = rutError != null,
                 modifier = Modifier
@@ -289,32 +289,32 @@ fun OlvidasteScreen(userPreferences: UserPreferences) {
 
             // Botón para recuperar contraseña
             Button(
-                onClick = {
-                    if (validateForm()) {
-                        recuperar()
-                    }
-                },
+                onClick = { recuperar() },
+                enabled = isFormValid,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFC107)
+                    containerColor = if (isFormValid) Color(0xFFFFC107) else Color(0xFFCCCCCC)
                 )
             ) {
                 Text("Recuperar Contraseña", fontSize = 20.sp, color = Color(0xFF000000))
             }
         }
 
-        // Diálogo de confirmación o error
-        if (showDialog) {
+        // Diálogo de éxito
+        if (showSuccessDialog) {
             AlertDialog(
-                onDismissRequest = { showDialog = false },
-                title = { Text("Resultado", fontSize = 20.sp) },
-                text = { Text(dialogMessage, color = Color(0xFF000000), fontSize = 18.sp) },
+                onDismissRequest = { showSuccessDialog = false },
+                title = { Text("Recuperación Exitosa") },
+                text = { Text(successMessage, color = Color(0xFF000000), fontSize = 18.sp) },
                 confirmButton = {
                     Button(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107)),
                         onClick = {
-                            showDialog = false
-                            context.startActivity(Intent(context, LoginActivity::class.java))
+                            showSuccessDialog = false
+
+                            // Redirigir al LoginActivity
+                            val intent = Intent(context, LoginActivity::class.java)
+                            context.startActivity(intent)
                         }
                     ) {
                         Text("Aceptar", fontSize = 18.sp, color = Color(0xFF000000))
@@ -322,6 +322,22 @@ fun OlvidasteScreen(userPreferences: UserPreferences) {
                 }
             )
         }
-    }
 
+        // Diálogo de error
+        if (showErrorDialog) {
+            AlertDialog(
+                onDismissRequest = { showErrorDialog = false },
+                title = { Text("Error de Registro") },
+                text = { Text(errorMessage, color = Color(0xFF000000), fontSize = 18.sp) },
+                confirmButton = {
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5449)),
+                        onClick = { showErrorDialog = false }
+                    ) {
+                        Text("Aceptar", fontSize = 18.sp, color = Color(0xFFFFFFFF))
+                    }
+                }
+            )
+        }
+    }
 }
