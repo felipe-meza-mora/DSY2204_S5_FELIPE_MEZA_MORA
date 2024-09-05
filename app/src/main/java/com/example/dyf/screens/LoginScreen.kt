@@ -6,10 +6,13 @@ import android.content.Intent
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,6 +24,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.dyf.MenuActivity
@@ -40,54 +45,65 @@ fun LoginScreen() {
 
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var isFormValid by remember { mutableStateOf(false) }
 
     // Leer datos de usuarios al iniciar la pantalla
     val usersList by userPreferences.userPreferencesFlow.collectAsState(initial = emptyList())
 
-    fun vibrate(context: Context) {
+    // Validación de formulario
+    fun validateForm() {
+        emailError = when {
+            email.isBlank() -> "El correo no puede estar vacío"
+            !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() -> "El correo no es válido"
+            else -> null
+        }
+        passwordError = when {
+            password.isBlank() -> "La contraseña no puede estar vacía"
+            else -> null
+        }
+        isFormValid = emailError == null && passwordError == null
+    }
+
+    // Función para vibración
+    fun vibrate(context: Context, isSuccess: Boolean) {
         val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         if (vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Para API 26 y superiores
-                val vibrationEffect = VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
+                val vibrationEffect = if (isSuccess) {
+                    VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE)
+                } else {
+                    VibrationEffect.createWaveform(longArrayOf(0, 100, 50, 100), -1)
+                }
                 vibrator.vibrate(vibrationEffect)
             } else {
-                // Para versiones anteriores
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(500) // Duración en milisegundos
+                if (isSuccess) {
+                    vibrator.vibrate(300) // Vibración única de 300ms
+                } else {
+                    vibrator.vibrate(longArrayOf(0, 100, 50, 100), -1) // Vibración patrón
+                }
             }
         }
     }
 
     // Validar credenciales
     fun validateCredentials() {
-        var valid = true
-        if (email.isBlank()) {
-            emailError = "El correo no puede estar vacío"
-            valid = false
-        }
-        if (password.isBlank()) {
-            passwordError = "La contraseña no puede estar vacía"
-            valid = false
-        }
-
-        if (valid) {
+        validateForm()
+        if (isFormValid) {
             val user = usersList.find { it.correo == email && it.password == password }
             if (user != null) {
-
                 val sharedPreferences = context.getSharedPreferences("UserSession", Context.MODE_PRIVATE)
                 val editor = sharedPreferences.edit()
                 editor.putString("userName", user.nombreCompleto)
                 editor.putString("userEmail", user.correo)
                 editor.apply()
-                vibrate(context)
+                vibrate(context, true)
                 val intent = Intent(context, MenuActivity::class.java)
                 context.startActivity(intent)
 
                 //(context as Activity).finish()
 
             } else {
-                vibrate(context)
+                vibrate(context, false)
                 emailError = "Credenciales incorrectas"
             }
         }
@@ -114,70 +130,111 @@ fun LoginScreen() {
                     .padding(bottom = 32.dp)
             )
 
-            // Texto Correo
+            // Campo de Correo Electrónico
+            val emailColor by animateColorAsState(targetValue = if (emailError == null) Color(0xFFFFC107) else Color(0xFFFF5449))
             OutlinedTextField(
                 value = email,
                 onValueChange = {
                     email = it
-                    emailError = null
+                    validateForm()
                 },
                 label = { Text("Correo Electrónico") },
-                modifier = Modifier.fillMaxWidth(),
                 isError = emailError != null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Campo de entrada de Correo Electrónico" },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = "Icono de Correo Electrónico",
+                        tint = emailColor
+                    )
+                },
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedBorderColor = Color(0xFFFFC107),
-                    cursorColor = Color(0xFFFFC107)
+                    focusedBorderColor = emailColor,
+                    cursorColor = emailColor
                 )
             )
             if (emailError != null) {
-                Text(
-                    text = emailError ?: "",
-                    color = Color(0xFFBB0000),
-                    fontSize = 18.sp,
-                    modifier = Modifier.align(Alignment.Start)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Error de Correo",
+                        tint = Color(0xFFFF5449)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = emailError ?: "",
+                        color = Color(0xFFFF5449),
+                        fontSize = 18.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Texto Password
+            // Campo de Contraseña
+            val passwordColor by animateColorAsState(targetValue = if (passwordError == null) Color(0xFFFFC107) else Color(0xFFFF5449))
             OutlinedTextField(
                 value = password,
                 onValueChange = {
                     password = it
-                    passwordError = null
+                    validateForm()
                 },
                 label = { Text("Contraseña") },
-                modifier = Modifier.fillMaxWidth(),
                 isError = passwordError != null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Campo de entrada de Contraseña" },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Icono de Contraseña",
+                        tint = passwordColor
+                    )
+                },
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedBorderColor = Color(0xFFFFC107),
-                    cursorColor = Color(0xFFFFC107)
+                    focusedBorderColor = passwordColor,
+                    cursorColor = passwordColor
                 )
             )
             if (passwordError != null) {
-                Text(
-                    text = passwordError ?: "",
-                    color = Color(0xFFBB0000),
-                    fontSize = 18.sp,
-                    modifier = Modifier.align(Alignment.Start)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Error de Contraseña",
+                        tint = Color(0xFFFF5449)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = passwordError ?: "",
+                        color = Color(0xFFFF5449),
+                        fontSize = 18.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Iniciar Sesión
+            // Botón para Iniciar Sesión
             Button(
                 onClick = { validateCredentials() },
+                enabled = isFormValid,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFC107)
+                    containerColor = if (isFormValid) Color(0xFFFFC107) else Color(0xFFCCCCCC)
                 )
             ) {
-                Text("Iniciar Sesión",fontSize = 18.sp, color = Color(0xFF000000))
+                Text("Iniciar Sesión", fontSize = 18.sp, color = Color(0xFF000000))
             }
 
             Spacer(modifier = Modifier.height(16.dp))

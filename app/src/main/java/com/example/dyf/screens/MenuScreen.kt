@@ -10,6 +10,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,28 +33,30 @@ fun MenuScreen(userPreferences: UserPreferences) {
     var expanded by remember { mutableStateOf(false) }
     var userName by remember { mutableStateOf("") }
 
-
     val usersList by userPreferences.userPreferencesFlow.collectAsState(initial = emptyList())
-
     val context = LocalContext.current
 
-    fun vibrate(context: Context) {
+    fun vibrate(context: Context, isSuccess: Boolean) {
         val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         if (vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-
-                val vibrationEffect = VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
+                val vibrationEffect = if (isSuccess) {
+                    VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE)
+                } else {
+                    VibrationEffect.createWaveform(longArrayOf(0, 100, 50, 100), -1)
+                }
                 vibrator.vibrate(vibrationEffect)
             } else {
-
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(500)
+                if (isSuccess) {
+                    vibrator.vibrate(300)
+                } else {
+                    vibrator.vibrate(longArrayOf(0, 100, 50, 100), -1)
+                }
             }
         }
     }
 
     LaunchedEffect(usersList) {
-
         val loggedInUser = usersList.firstOrNull()
         userName = loggedInUser?.nombreCompleto ?: "Usuario"
     }
@@ -64,6 +69,7 @@ fun MenuScreen(userPreferences: UserPreferences) {
             modifier = Modifier.fillMaxSize()
         ) {
 
+            // Encabezado con el saludo y el menú
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -79,23 +85,20 @@ fun MenuScreen(userPreferences: UserPreferences) {
                 ) {
                     Text(
                         text = "Hola, $userName",
-                        fontSize = 18.sp,
-                        color = Color.Black,
-                        fontWeight = FontWeight.Normal
+                        fontSize = 20.sp, // Ajustado para igualar a las otras pantallas
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
                     )
-
 
                     Box(
                         modifier = Modifier
                             .clickable { expanded = !expanded }
                     ) {
-                        Text(
-                            text = "Menu",
-                            fontSize = 18.sp,
-                            color = Color.Black,
-                            fontWeight = FontWeight.Normal
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Menú",
+                            modifier = Modifier.size(24.dp)
                         )
-
 
                         DropdownMenu(
                             expanded = expanded,
@@ -105,8 +108,17 @@ fun MenuScreen(userPreferences: UserPreferences) {
                             DropdownMenuItem(
                                 text = { Text("Cerrar sesión") },
                                 onClick = {
-                                    vibrate(context)
+                                    vibrate(context, false)
                                     (context as? ComponentActivity)?.finishAffinity()
+                                    val intent = Intent(context, LoginActivity::class.java)
+                                    context.startActivity(intent)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.ExitToApp,
+                                        contentDescription = "Cerrar sesión",
+                                        tint = Color.Black
+                                    )
                                 }
                             )
                         }
@@ -114,7 +126,7 @@ fun MenuScreen(userPreferences: UserPreferences) {
                 }
             }
 
-
+            // Contenido principal
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -131,8 +143,9 @@ fun MenuScreen(userPreferences: UserPreferences) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Pronto más novedades",
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 18.sp,
                     color = Color.Black,
+                    fontWeight = FontWeight.Normal,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
